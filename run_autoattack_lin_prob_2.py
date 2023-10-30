@@ -2,10 +2,9 @@ import os
 import clip
 import torch
 import torch.nn as nn
-import torch.optim as optim
+import csv
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
-from torchvision.utils import save_image
+from torch.utils.data import DataLoader, Subset
 from autoattack import AutoAttack
 
 
@@ -35,7 +34,7 @@ class ModelWrapper(nn.Module):
 # Load the model and preprocessing 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load('RN50', device)
-batch_size = 16
+batch_size = 128
 
 print("load model")
 classifier = torch.load("/data/gpfs/projects/punim2103/classifier_model_full.pth", map_location=device)
@@ -46,7 +45,8 @@ wrapped_model.eval()
 # load data
 print("load data")
 test_dataset = datasets.CIFAR10(root="./data", train=False, transform=transforms.ToTensor())
-test_loader = DataLoader(test_dataset, batch_size=batch_size)
+test_subset = Subset(test_dataset, range(1000))
+test_loader = DataLoader(test_subset, batch_size=batch_size)
 
 
 # define the attacker
@@ -58,32 +58,37 @@ import torch
 
 
 batch = 0
+# Prepare to save results to CSV
+csv_path = '/data/gpfs/projects/punim2103/autoattack_results/original_model/results.csv'
 
-for images, labels in test_loader:
-    print("start attack")
-    batch += 1
-    print("batch "+str(batch))
-    
-    # Move images and labels to the appropriate device (GPU/CPU)
-    images, labels = images.to(device), labels.to(device)
+with open(csv_path, 'w', newline='') as csvfile:
+    csv_writer = csv.writer(csvfile)
+    csv_writer.writerow(["Epsilon", "Initial Accuracy", "Robust Accuracy", "Max Perturbation"])  # Header
 
-    outputs = wrapped_model(images)
-    _, predicted = torch.max(outputs, 1)
-    correct = (predicted == labels).sum().item()
-    print('Initial Accuracy for Batch {}: {:.2f}%'.format(batch, 100 * correct / batch_size))
+    for images, labels in test_loader:
+        print("start attack")
+        batch += 1
+        print("batch "+str(batch))
+        
+        # Move images and labels to the appropriate device (GPU/CPU)
+        images, labels = images.to(device), labels.to(device)
 
+        outputs = wrapped_model(images)
+        _, predicted = torch.max(outputs, 1)
+        initial_acc = (predicted == labels).sum().item()
+        print('Initial Accuracy for Batch {}: {:.2f}%'.format(batch, 100 * initial_acc / batch_size))
 
+        x_adv, robust_accuracy, res = adversary.run_standard_evaluation(images, labels, bs=batch_size)
 
-    #results = adversary.run_standard_evaluation_individual(images, labels, bs=batch_size)
-    results = adversary.run_standard_evaluation(images, labels, bs=batch_size)
-    #x_adv = results['apgd-ce']  # Get adversarial examples for the apgd-ce attack
-    
-    print("done")
-    if batch == 5:
-        break
-    
+        # Save adversarial examples (x_adv) for this batch as a tensor
+        torch.save(x_adv, f'/data/gpfs/projects/punim2103/autoattack_results/original_model/eps_{epsilon}_batch_{batch}_adv.pt')
 
-# Print the accuracy
+        # Save results to CSV
+        csv_writer.writerow([epsilon, 100 * initial_acc / batch_size, robust_accuracy, res.item()])
+
+        print("done")
+        if batch * batch_size >= 1000:  # Stop after processing 1000 images
+            break
 
 
 
