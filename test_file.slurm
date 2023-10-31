@@ -17,4 +17,4 @@ source /data/gpfs/projects/punim2103/my_env/bin/activate
 
 # Run your Python script with the specified parameters
 echo "Running test file"
-time srun -n 1 python3 tmp.py
+time srun -n 1 python3 linear_probing_resnet_eval.py

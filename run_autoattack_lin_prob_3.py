@@ -15,29 +15,28 @@ class ModelWrapper(nn.Module):
         super(ModelWrapper, self).__init__()
         self.classifier = classifier
         self.clip_model = clip_model
-        
-        # Define the preprocessing pipeline within the ModelWrapper
         self.preprocess = transforms.Compose([
             transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(resolution),
+            transforms.ToTensor(),
             transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
         ])
 
     def forward(self, images):
-        images = self.preprocess(images)
         features = self.clip_model.encode_image(images)
         outputs = self.classifier(features.float().to(device))
         return outputs
 
 
 
+
 # Load the model and preprocessing 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load('RN50', device)
-batch_size = 128
+batch_size = 2
 
 print("load model")
-classifier = torch.load("/data/gpfs/projects/punim2103/new_attempt_2_classifier_model_full.pth", map_location=device)
+classifier = torch.load("/data/gpfs/projects/punim2103/classifier_model_full.pth", map_location=device)
 resolution = 224  # specify the input resolution for your CLIP model
 wrapped_model = ModelWrapper(classifier, model, resolution).to(device)
 wrapped_model.eval()
@@ -57,31 +56,46 @@ adversary = AutoAttack(wrapped_model, norm='Linf', eps=epsilon, version='standar
 import torch
 
 
+
+total_correct = 0
+total_images = 0
 batch = 0
 # Prepare to save results to CSV
-csv_path = '/data/gpfs/projects/punim2103/autoattack_results/original_model_new_attempt_2/results.csv'
+csv_path = '/data/gpfs/projects/punim2103/autoattack_results/original_model_3/results.csv'
+
+to_pil = transforms.ToPILImage()  # Define ToPILImage transform here
+preprocess = wrapped_model.preprocess  # Get preprocessing pipeline from the model wrapper
+
 
 with open(csv_path, 'w', newline='') as csvfile:
     csv_writer = csv.writer(csvfile)
     csv_writer.writerow(["Epsilon", "Initial Accuracy", "Robust Accuracy", "Max Perturbation"])  # Header
 
+    
     for images, labels in test_loader:
         print("start attack")
         batch += 1
         print("batch "+str(batch))
-        
-        # Move images and labels to the appropriate device (GPU/CPU)
+        images, labels = images.to(device), labels.to(device)
+
+        # Convert images to PIL format and preprocess
+        images = torch.stack([preprocess(to_pil(img)) for img in images])
+
         images, labels = images.to(device), labels.to(device)
 
         outputs = wrapped_model(images)
         _, predicted = torch.max(outputs, 1)
         initial_acc = (predicted == labels).sum().item()
-        print('Initial Accuracy for Batch {}: {:.2f}%'.format(batch, 100 * initial_acc / batch_size))
+
+        total_correct += initial_acc
+        total_images += images.size(0)
+
+        print('Initial Accuracy for Batch {}: {:.2f}%'.format(batch, 100 * initial_acc / images.size(0)))
 
         x_adv, robust_accuracy, res = adversary.run_standard_evaluation(images, labels, bs=batch_size)
 
         # Save adversarial examples (x_adv) for this batch as a tensor
-        torch.save(x_adv, f'/data/gpfs/projects/punim2103/autoattack_results/original_model_new_attempt_2/eps_{epsilon}_batch_{batch}_adv.pt')
+        torch.save(x_adv, f'/data/gpfs/projects/punim2103/autoattack_results/original_model_3/eps_{epsilon}_batch_{batch}_adv.pt')
 
         # Save results to CSV
         csv_writer.writerow([epsilon, 100 * initial_acc / batch_size, robust_accuracy, res.item()])
