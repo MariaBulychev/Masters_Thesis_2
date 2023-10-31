@@ -1,4 +1,3 @@
-import os
 import clip
 import torch
 import torch.nn as nn
@@ -18,7 +17,7 @@ class ModelWrapper(nn.Module):
         
         # Define the preprocessing pipeline within the ModelWrapper
         self.preprocess = transforms.Compose([
-            transforms.Resize(resolution),
+            transforms.Resize(resolution, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(resolution),
             transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
         ])
@@ -59,7 +58,7 @@ import torch
 
 batch = 0
 # Prepare to save results to CSV
-csv_path = '/data/gpfs/projects/punim2103/autoattack_results/original_model/results.csv'
+csv_path = '/data/gpfs/projects/punim2103/autoattack_results/original_model_2/results.csv'
 
 with open(csv_path, 'w', newline='') as csvfile:
     csv_writer = csv.writer(csvfile)
@@ -81,7 +80,7 @@ with open(csv_path, 'w', newline='') as csvfile:
         x_adv, robust_accuracy, res = adversary.run_standard_evaluation(images, labels, bs=batch_size)
 
         # Save adversarial examples (x_adv) for this batch as a tensor
-        torch.save(x_adv, f'/data/gpfs/projects/punim2103/autoattack_results/original_model/eps_{epsilon}_batch_{batch}_adv.pt')
+        torch.save(x_adv, f'/data/gpfs/projects/punim2103/autoattack_results/original_model_2/eps_{epsilon}_batch_{batch}_adv.pt')
 
         # Save results to CSV
         csv_writer.writerow([epsilon, 100 * initial_acc / batch_size, robust_accuracy, res.item()])

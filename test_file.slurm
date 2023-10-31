@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=0-00:10:00
-#SBATCH -p gpu-a100         
+#SBATCH --time=0-01:00:00
+#SBATCH -p gpu-a100-short         
 #SBATCH --gres=gpu:1  
 
 # Load required modules
@@ -17,4 +17,4 @@ source /data/gpfs/projects/punim2103/my_env/bin/activate
 
 # Run your Python script with the specified parameters
 echo "Running test file"
-time srun -n 1 python3 test_file_2.py
+time srun -n 1 python3 tmp.py
