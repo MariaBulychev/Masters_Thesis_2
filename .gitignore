@@ -10,5 +10,4 @@ train_results/
 *.out
 
 autoattack_results/*
-!autoattack_results/*.csv
 
